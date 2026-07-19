@@ -24,6 +24,8 @@
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 	</array>
+	<key>UIRequiresFullScreen</key>
+	<true/>
 
 	<key>CFBundleURLTypes</key>
 	<array>
@@ -35,6 +37,9 @@
 		</dict>
 	</array>
 
+	<!-- The Wearables Developer Center UI claims this isn't needed in Developer
+	     Mode, but omitting it made Meta AI open with no registration prompt.
+	     Confirmed required in practice — keep this populated. -->
 	<key>MWDAT</key>
 	<dict>
 		<key>AppLinkURLScheme</key>
