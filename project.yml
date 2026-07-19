@@ -1,0 +1,29 @@
+name: MetaObsidian
+options:
+  bundleIdPrefix: com.sinisternerd
+  deploymentTarget:
+    iOS: "15.2"
+configFiles:
+  Debug: config.xcconfig
+  Release: config.xcconfig
+packages:
+  MetaWearablesDAT:
+    url: https://github.com/facebook/meta-wearables-dat-ios
+    from: 0.3.0
+targets:
+  MetaObsidian:
+    type: application
+    platform: iOS
+    sources:
+      - path: MetaObsidian
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sinisternerd.metaobsidian
+        INFOPLIST_FILE: MetaObsidian/Info.plist
+        SWIFT_VERSION: "5.0"
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+    dependencies:
+      - package: MetaWearablesDAT
+        product: MWDATCore
+      - package: MetaWearablesDAT
+        product: MWDATCamera

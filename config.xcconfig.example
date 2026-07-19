@@ -1,0 +1,9 @@
+// Copy this file to config.xcconfig and fill in real values.
+// config.xcconfig is gitignored — never commit real credentials.
+
+// From the Wearables Developer Center (wearables.developer.meta.com) app registration
+META_APP_ID = your-meta-app-id
+CLIENT_TOKEN = your-client-token
+
+// Your Apple Developer Team ID (Xcode > Settings > Accounts)
+DEVELOPMENT_TEAM = your-apple-team-id
