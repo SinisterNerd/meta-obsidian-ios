@@ -12,8 +12,13 @@ final class WearablesManager: ObservableObject {
     private var session: DeviceSession?
 
     init() {
+        registrationState = Wearables.shared.registrationState
+        devices = Wearables.shared.devices
         Task { await observeRegistrationState() }
         Task { await observeDevices() }
+        Task {
+            cameraPermission = (try? await Wearables.shared.checkPermissionStatus(.camera)) ?? .denied
+        }
     }
 
     func startRegistration() {
@@ -54,15 +59,21 @@ final class WearablesManager: ObservableObject {
     }
 
     private func observeRegistrationState() async {
+        print("observeRegistrationState: starting to listen")
         for await state in Wearables.shared.registrationStateStream() {
+            print("observeRegistrationState: received \(state)")
             registrationState = state
         }
+        print("observeRegistrationState: stream ended")
     }
 
     private func observeDevices() async {
+        print("observeDevices: starting to listen")
         for await devices in Wearables.shared.devicesStream() {
+            print("observeDevices: received \(devices)")
             self.devices = devices
         }
+        print("observeDevices: stream ended")
     }
 }
 

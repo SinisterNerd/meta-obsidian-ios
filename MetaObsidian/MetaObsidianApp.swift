@@ -8,7 +8,9 @@ struct MetaObsidianApp: App {
     init() {
         do {
             try Wearables.configure()
+            print("Wearables.configure() succeeded")
         } catch {
+            print("Wearables.configure() failed: \(error)")
             assertionFailure("Failed to configure Wearables SDK: \(error)")
         }
     }
@@ -18,7 +20,15 @@ struct MetaObsidianApp: App {
             ContentView()
                 .environmentObject(wearables)
                 .onOpenURL { url in
-                    Task { try? await Wearables.shared.handleUrl(url) }
+                    print("onOpenURL received: \(url)")
+                    Task {
+                        do {
+                            let handled = try await Wearables.shared.handleUrl(url)
+                            print("handleUrl result: \(handled)")
+                        } catch {
+                            print("handleUrl failed: \(error)")
+                        }
+                    }
                 }
         }
     }
