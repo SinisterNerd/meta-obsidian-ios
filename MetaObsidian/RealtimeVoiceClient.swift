@@ -45,12 +45,16 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
     private var playbackSourceFormat: AVAudioFormat?
     private var playbackConverter: AVAudioConverter?
     private var playbackEngineFormat: AVAudioFormat?
+    private var pendingPlaybackBuffers = 0
+    private var awaitingPlaybackDrain = false
 
     func start() async {
         guard !isActive else { return }
         errorMessage = nil
         userTranscript = ""
         assistantTranscript = ""
+        pendingPlaybackBuffers = 0
+        awaitingPlaybackDrain = false
 
         guard
             let apiKey = Bundle.main.object(forInfoDictionaryKey: "AssistantAPIKey") as? String,
@@ -168,8 +172,12 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
         case "response.created":
             isResponding = true
         case "response.done":
+            // Don't tear down immediately — the model can finish generating (and
+            // finish sending transcript deltas) before the audio already queued in
+            // the player has actually finished playing. Wait for playback to drain.
             isResponding = false
-            stop()
+            awaitingPlaybackDrain = true
+            finishIfPlaybackDrained()
         case "error":
             print("RealtimeVoiceClient server error event: \(json)")
             if let errorInfo = json["error"] as? [String: Any], let message = errorInfo["message"] as? String {
@@ -300,6 +308,22 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
             return
         }
 
-        playerNode.scheduleBuffer(destBuffer)
+        pendingPlaybackBuffers += 1
+        // .dataPlayedBack (not the default .dataConsumed) is required here — the
+        // default fires as soon as the buffer is handed to the mixer, not when it's
+        // actually finished being audibly rendered, which would defeat the point.
+        playerNode.scheduleBuffer(destBuffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.pendingPlaybackBuffers -= 1
+                self.finishIfPlaybackDrained()
+            }
+        }
+    }
+
+    private func finishIfPlaybackDrained() {
+        guard awaitingPlaybackDrain, pendingPlaybackBuffers <= 0 else { return }
+        awaitingPlaybackDrain = false
+        stop()
     }
 }
