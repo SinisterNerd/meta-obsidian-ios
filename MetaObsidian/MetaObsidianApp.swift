@@ -32,15 +32,16 @@ struct MetaObsidianApp: App {
                     }
                     realtimeClient.onConversationEnded = { transcript in
                         print("Conversation ended:\n\(transcript)")
-                        guard !transcript.isEmpty else {
-                            Task { await wakeWordListener.start() }
-                            return
-                        }
-                        if let url = ObsidianClient.dailyNoteAppendURL(content: transcript) {
+                        if !transcript.isEmpty, let url = ObsidianClient.dailyNoteAppendURL(content: transcript) {
                             UIApplication.shared.open(url)
-                        } else {
-                            Task { await wakeWordListener.start() }
                         }
+                        // Resume immediately rather than waiting on Obsidian's
+                        // x-success callback — that's unreliable for the "daily"
+                        // action (see project history), so relying on it alone left
+                        // wake-word listening stuck off after every real save.
+                        // start() no-ops if already listening, so this is harmless
+                        // even if the onOpenURL branch below also fires.
+                        Task { await wakeWordListener.start() }
                     }
                 }
                 .onOpenURL { url in

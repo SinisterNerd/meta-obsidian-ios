@@ -1,6 +1,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import AudioToolbox
 
 // Continuous on-device wake-phrase detection. Interim approach while Picovoice's
 // sales-gated signup is pending — costs more battery than a dedicated wake-word
@@ -111,6 +112,7 @@ final class WakeWordListener: ObservableObject {
             lastPartialTranscript = text
             if text.contains(wakePhrase) {
                 stop()
+                playAcknowledgmentChime()
                 onWakeWordDetected?()
             }
         }
@@ -135,5 +137,13 @@ final class WakeWordListener: ObservableObject {
         request?.endAudio()
         request = nil
         startRecognitionTask()
+    }
+
+    // System sound ID 1013 is a commonly-cited "sent" chime from community
+    // documentation of /System/Library/Audio/UISounds — not an officially
+    // documented Apple API, so the exact sound isn't guaranteed. Swap the ID if
+    // it's not what you want; there's no supported way to look these up formally.
+    private func playAcknowledgmentChime() {
+        AudioServicesPlaySystemSound(1013)
     }
 }
