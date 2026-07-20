@@ -74,5 +74,7 @@
 
 	<key>WhisperAPIKey</key>
 	<string>$(WHISPER_API_KEY)</string>
+	<key>AssistantAPIKey</key>
+	<string>$(ASSISTANT_API_KEY)</string>
 </dict>
 </plist>

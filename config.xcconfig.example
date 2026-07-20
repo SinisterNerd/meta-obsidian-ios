@@ -10,3 +10,7 @@ DEVELOPMENT_TEAM = your-apple-team-id
 
 // OpenAI API key with access to the Whisper transcription endpoint
 WHISPER_API_KEY = your-openai-api-key
+
+// API key for the chat/assistant provider (currently OpenAI; swap providers later
+// without renaming this). For testing, duplicating the Whisper key above is fine.
+ASSISTANT_API_KEY = your-assistant-api-key

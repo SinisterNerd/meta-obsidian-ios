@@ -8,6 +8,8 @@ final class AudioRecorder: ObservableObject {
     @Published var transcript = ""
     @Published var errorMessage: String?
     @Published var savedToObsidian = false
+    @Published var assistantReply = ""
+    @Published var isAsking = false
 
     private let engine = AVAudioEngine()
     private var audioFile: AVAudioFile?
@@ -16,6 +18,8 @@ final class AudioRecorder: ObservableObject {
     func startRecording() async {
         errorMessage = nil
         transcript = ""
+        assistantReply = ""
+        savedToObsidian = false
 
         let session = AVAudioSession.sharedInstance()
         do {
@@ -79,6 +83,17 @@ final class AudioRecorder: ObservableObject {
             transcript = try await WhisperClient.transcribe(fileURL: url)
         } catch {
             errorMessage = "Transcription failed: \(error.localizedDescription)"
+        }
+    }
+
+    func askAssistant() async {
+        guard !transcript.isEmpty else { return }
+        isAsking = true
+        defer { isAsking = false }
+        do {
+            assistantReply = try await AssistantClient.ask(transcript)
+        } catch {
+            errorMessage = "Assistant failed: \(error.localizedDescription)"
         }
     }
 }

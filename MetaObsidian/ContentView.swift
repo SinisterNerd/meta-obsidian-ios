@@ -62,6 +62,21 @@ struct ContentView: View {
                     .padding(.horizontal)
             }
 
+            Button("Ask Assistant") {
+                Task { await audioRecorder.askAssistant() }
+            }
+            .disabled(audioRecorder.transcript.isEmpty || audioRecorder.isAsking)
+
+            if audioRecorder.isAsking {
+                Text("Asking…")
+            }
+
+            if !audioRecorder.assistantReply.isEmpty {
+                Text(audioRecorder.assistantReply)
+                    .padding(.horizontal)
+                    .foregroundColor(.blue)
+            }
+
             if let error = audioRecorder.errorMessage {
                 Text(error)
                     .foregroundColor(.red)
@@ -72,7 +87,11 @@ struct ContentView: View {
             Divider()
 
             Button("Save to Daily Note") {
-                guard let url = ObsidianClient.dailyNoteAppendURL(content: audioRecorder.transcript) else {
+                var content = "**You:** \(audioRecorder.transcript)"
+                if !audioRecorder.assistantReply.isEmpty {
+                    content += "\n\n**Assistant:** \(audioRecorder.assistantReply)"
+                }
+                guard let url = ObsidianClient.dailyNoteAppendURL(content: content) else {
                     obsidianError = "Couldn't build Obsidian URI"
                     return
                 }
