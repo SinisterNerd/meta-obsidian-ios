@@ -1,8 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var wearables: WearablesManager
     @EnvironmentObject private var audioRecorder: AudioRecorder
+    @EnvironmentObject private var vaultManager: VaultManager
+    @State private var showingVaultPicker = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -66,8 +69,41 @@ struct ContentView: View {
                     .font(.footnote)
                     .padding(.horizontal)
             }
+
+            Divider()
+
+            Text("Vault: \(vaultManager.vaultURL?.lastPathComponent ?? "not selected")")
+
+            Button("Choose Vault Folder") {
+                showingVaultPicker = true
+            }
+
+            Button("Save to Obsidian") {
+                vaultManager.saveTranscript(audioRecorder.transcript)
+            }
+            .disabled(audioRecorder.transcript.isEmpty || vaultManager.vaultURL == nil)
+
+            if let filename = vaultManager.lastSavedFilename {
+                Text("Saved: \(filename)")
+                    .font(.footnote)
+            }
+
+            if let error = vaultManager.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+                    .padding(.horizontal)
+            }
         }
         .padding()
+        .fileImporter(isPresented: $showingVaultPicker, allowedContentTypes: [.folder]) { result in
+            switch result {
+            case .success(let url):
+                vaultManager.setVaultFolder(url)
+            case .failure(let error):
+                vaultManager.errorMessage = "Folder selection failed: \(error.localizedDescription)"
+            }
+        }
     }
 }
 
@@ -75,4 +111,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(WearablesManager())
         .environmentObject(AudioRecorder())
+        .environmentObject(VaultManager())
 }
