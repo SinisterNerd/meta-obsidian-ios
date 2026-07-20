@@ -1,39 +1,42 @@
 import Foundation
 import AVFoundation
 
-// Bidirectional voice conversation over OpenAI's Realtime API. Streams glasses mic
-// audio out over a WebSocket, plays the model's spoken reply back through the
-// glasses speaker, and accumulates both sides' text transcripts.
+// Bidirectional multi-turn voice conversation over OpenAI's Realtime API. Streams
+// glasses mic audio out over a WebSocket, plays the model's spoken reply back
+// through the glasses speaker, and accumulates a running multi-turn transcript.
+// The session stays open across turns until a silence timeout or a stop phrase
+// ends the conversation, at which point the full transcript is handed back via
+// onConversationEnded.
 //
 // Protocol notes, confirmed on-device (not just from docs):
 // - Mic audio streaming works — server-side VAD (input_audio_buffer.speech_started/
 //   stopped) correctly detects real speech in our resampled 8kHz->24kHz PCM16 audio.
 // - response.output_audio_transcript.delta correctly accumulates the assistant's
 //   spoken reply as text.
+// - conversation.item.input_audio_transcription.completed correctly delivers the
+//   user's transcribed speech (there's also a .delta variant we don't need).
 // - session.audio.input/output.format must be an object — {"type": "audio/pcm",
 //   "rate": 24000} — NOT a bare "pcm16" string. Sending it wrong doesn't kill the
 //   connection, it just silently rejects the whole session.update (including
 //   instructions and transcription config) while the session keeps running on
 //   defaults, which is a confusing failure mode to debug from behavior alone.
-//
-// NOT yet confirmed: the event name/shape for the *user's* transcribed speech —
-// transcription was never actually enabled in the one real test run so far (the
-// format bug above blocked the session.update that would've turned it on).
-// "conversation.item.input_audio_transcription.completed" is still just a guess.
-// Any event type we don't recognize gets printed, so the next on-device test
-// should reveal the real name if this guess is wrong.
-//
-// Also unconfirmed: whether playback audio is actually audible through the
-// glasses speaker (no errors during conversion, but that doesn't prove it's heard).
+// - response.done can fire before queued audio has actually finished playing —
+//   must wait for playback to drain (.dataPlayedBack completion) before treating
+//   a turn as finished, or replies get audibly cut off.
 @MainActor
 final class RealtimeVoiceClient: NSObject, ObservableObject {
     @Published var isActive = false
     @Published var isResponding = false
-    @Published var userTranscript = ""
-    @Published var assistantTranscript = ""
+    @Published var currentUserTurn = ""
+    @Published var currentAssistantTurn = ""
+    @Published var conversationTranscript = ""
     @Published var errorMessage: String?
 
-    var onConversationEnded: ((_ userTranscript: String, _ assistantTranscript: String) -> Void)?
+    var onConversationEnded: ((_ transcript: String) -> Void)?
+
+    // TODO: make configurable
+    var stopPhrases = ["stop", "that's all", "that is all", "goodbye", "end conversation"]
+    var silenceTimeoutSeconds: TimeInterval = 8
 
     private let realtimeSampleRate: Double = 24000
     private let engine = AVAudioEngine()
@@ -47,14 +50,20 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
     private var playbackEngineFormat: AVAudioFormat?
     private var pendingPlaybackBuffers = 0
     private var awaitingPlaybackDrain = false
+    private var conversationShouldEndAfterThisTurn = false
+    private var silenceTimer: DispatchWorkItem?
 
     func start() async {
         guard !isActive else { return }
         errorMessage = nil
-        userTranscript = ""
-        assistantTranscript = ""
+        currentUserTurn = ""
+        currentAssistantTurn = ""
+        conversationTranscript = ""
         pendingPlaybackBuffers = 0
         awaitingPlaybackDrain = false
+        conversationShouldEndAfterThisTurn = false
+        silenceTimer?.cancel()
+        silenceTimer = nil
 
         guard
             let apiKey = Bundle.main.object(forInfoDictionaryKey: "AssistantAPIKey") as? String,
@@ -88,10 +97,12 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
     func stop() {
         guard isActive else { return }
         isActive = false
+        silenceTimer?.cancel()
+        silenceTimer = nil
         stopAudioIO()
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
-        onConversationEnded?(userTranscript, assistantTranscript)
+        onConversationEnded?(conversationTranscript)
     }
 
     // MARK: - WebSocket
@@ -157,17 +168,24 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
         else { return }
 
         switch type {
+        case "input_audio_buffer.speech_started":
+            // User is talking again — cancel any pending end-of-conversation timeout.
+            silenceTimer?.cancel()
+            silenceTimer = nil
         case "response.output_audio.delta":
             if let b64 = json["delta"] as? String, let audioData = Data(base64Encoded: b64) {
                 playAudio(pcm16Data: audioData)
             }
         case "response.output_audio_transcript.delta":
             if let delta = json["delta"] as? String {
-                assistantTranscript += delta
+                currentAssistantTurn += delta
             }
         case "conversation.item.input_audio_transcription.completed":
             if let transcript = json["transcript"] as? String {
-                userTranscript += transcript
+                currentUserTurn += transcript
+                if containsStopPhrase(transcript) {
+                    conversationShouldEndAfterThisTurn = true
+                }
             }
         case "response.created":
             isResponding = true
@@ -186,6 +204,42 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
         default:
             print("RealtimeVoiceClient unhandled event type: \(type) — \(json)")
         }
+    }
+
+    private func containsStopPhrase(_ transcript: String) -> Bool {
+        let lowered = transcript.lowercased()
+        return stopPhrases.contains { lowered.contains($0) }
+    }
+
+    // MARK: - Turn / conversation lifecycle
+
+    private func finishIfPlaybackDrained() {
+        guard awaitingPlaybackDrain, pendingPlaybackBuffers <= 0 else { return }
+        awaitingPlaybackDrain = false
+        handleTurnComplete()
+    }
+
+    private func handleTurnComplete() {
+        conversationTranscript += "**You:** \(currentUserTurn)\n\n**Assistant:** \(currentAssistantTurn)\n\n"
+        currentUserTurn = ""
+        currentAssistantTurn = ""
+
+        if conversationShouldEndAfterThisTurn {
+            stop()
+            return
+        }
+
+        scheduleSilenceTimeout()
+    }
+
+    private func scheduleSilenceTimeout() {
+        silenceTimer?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            print("RealtimeVoiceClient: silence timeout, ending conversation")
+            self?.stop()
+        }
+        silenceTimer = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + silenceTimeoutSeconds, execute: workItem)
     }
 
     // MARK: - Mic capture -> input_audio_buffer.append
@@ -319,11 +373,5 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
                 self.finishIfPlaybackDrained()
             }
         }
-    }
-
-    private func finishIfPlaybackDrained() {
-        guard awaitingPlaybackDrain, pendingPlaybackBuffers <= 0 else { return }
-        awaitingPlaybackDrain = false
-        stop()
     }
 }

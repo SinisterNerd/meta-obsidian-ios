@@ -30,17 +30,13 @@ struct MetaObsidianApp: App {
                         print("Wake word detected")
                         Task { await realtimeClient.start() }
                     }
-                    realtimeClient.onConversationEnded = { userText, assistantText in
-                        print("Conversation ended: user=\(userText) assistant=\(assistantText)")
-                        guard !userText.isEmpty || !assistantText.isEmpty else {
+                    realtimeClient.onConversationEnded = { transcript in
+                        print("Conversation ended:\n\(transcript)")
+                        guard !transcript.isEmpty else {
                             Task { await wakeWordListener.start() }
                             return
                         }
-                        var content = "**You:** \(userText)"
-                        if !assistantText.isEmpty {
-                            content += "\n\n**Assistant:** \(assistantText)"
-                        }
-                        if let url = ObsidianClient.dailyNoteAppendURL(content: content) {
+                        if let url = ObsidianClient.dailyNoteAppendURL(content: transcript) {
                             UIApplication.shared.open(url)
                         } else {
                             Task { await wakeWordListener.start() }

@@ -188,15 +188,22 @@ struct ContentView: View {
                     .font(.footnote)
             }
 
-            if !realtimeClient.userTranscript.isEmpty {
-                Text("You: \(realtimeClient.userTranscript)")
+            if !realtimeClient.currentUserTurn.isEmpty {
+                Text("You: \(realtimeClient.currentUserTurn)")
                     .padding(.horizontal)
             }
 
-            if !realtimeClient.assistantTranscript.isEmpty {
-                Text("Assistant: \(realtimeClient.assistantTranscript)")
+            if !realtimeClient.currentAssistantTurn.isEmpty {
+                Text("Assistant: \(realtimeClient.currentAssistantTurn)")
                     .padding(.horizontal)
                     .foregroundColor(.blue)
+            }
+
+            if !realtimeClient.conversationTranscript.isEmpty {
+                Text(realtimeClient.conversationTranscript)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal)
             }
 
             if let error = realtimeClient.errorMessage {
