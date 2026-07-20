@@ -23,6 +23,13 @@ struct MetaObsidianApp: App {
                 .environmentObject(audioRecorder)
                 .onOpenURL { url in
                     print("onOpenURL received: \(url)")
+
+                    if url.host == ObsidianClient.returnCallbackHost {
+                        print("Returned from Obsidian after saving")
+                        audioRecorder.savedToObsidian = true
+                        return
+                    }
+
                     Task {
                         do {
                             let handled = try await Wearables.shared.handleUrl(url)

@@ -7,6 +7,7 @@ final class AudioRecorder: ObservableObject {
     @Published var isTranscribing = false
     @Published var transcript = ""
     @Published var errorMessage: String?
+    @Published var savedToObsidian = false
 
     private let engine = AVAudioEngine()
     private var audioFile: AVAudioFile?

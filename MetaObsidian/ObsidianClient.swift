@@ -4,10 +4,13 @@ enum ObsidianClient {
     // TODO: make configurable (e.g. a settings screen) instead of hardcoding.
     static let vaultName = "personal"
 
+    static let returnCallbackHost = "obsidian-saved"
+
     static func dailyNoteAppendURL(content: String) -> URL? {
         let vault = percentEncode(vaultName)
-        let encodedContent = percentEncode("\n\n" + content)
-        let urlString = "obsidian://daily?vault=\(vault)&content=\(encodedContent)&append=true&silent=true"
+        let encodedContent = percentEncode("\n\n---\n\n" + content)
+        let successCallback = percentEncode("metaobsidian://\(returnCallbackHost)")
+        let urlString = "obsidian://daily?vault=\(vault)&content=\(encodedContent)&append=true&silent=true&x-success=\(successCallback)"
         return URL(string: urlString)
     }
 

@@ -76,6 +76,7 @@ struct ContentView: View {
                     obsidianError = "Couldn't build Obsidian URI"
                     return
                 }
+                audioRecorder.savedToObsidian = false
                 openURL(url) { accepted in
                     if !accepted {
                         obsidianError = "Obsidian didn't open — is it installed?"
@@ -83,6 +84,12 @@ struct ContentView: View {
                 }
             }
             .disabled(audioRecorder.transcript.isEmpty)
+
+            if audioRecorder.savedToObsidian {
+                Text("Saved ✓")
+                    .foregroundColor(.green)
+                    .font(.footnote)
+            }
 
             if let obsidianError {
                 Text(obsidianError)
