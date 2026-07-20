@@ -6,6 +6,7 @@ struct MetaObsidianApp: App {
     @StateObject private var wearables = WearablesManager()
     @StateObject private var audioRecorder = AudioRecorder()
     @StateObject private var wakeWordListener = WakeWordListener()
+    @StateObject private var realtimeClient = RealtimeVoiceClient()
 
     init() {
         do {
@@ -23,10 +24,27 @@ struct MetaObsidianApp: App {
                 .environmentObject(wearables)
                 .environmentObject(audioRecorder)
                 .environmentObject(wakeWordListener)
+                .environmentObject(realtimeClient)
                 .onAppear {
                     wakeWordListener.onWakeWordDetected = {
                         print("Wake word detected")
-                        Task { await audioRecorder.startRecording() }
+                        Task { await realtimeClient.start() }
+                    }
+                    realtimeClient.onConversationEnded = { userText, assistantText in
+                        print("Conversation ended: user=\(userText) assistant=\(assistantText)")
+                        guard !userText.isEmpty || !assistantText.isEmpty else {
+                            Task { await wakeWordListener.start() }
+                            return
+                        }
+                        var content = "**You:** \(userText)"
+                        if !assistantText.isEmpty {
+                            content += "\n\n**Assistant:** \(assistantText)"
+                        }
+                        if let url = ObsidianClient.dailyNoteAppendURL(content: content) {
+                            UIApplication.shared.open(url)
+                        } else {
+                            Task { await wakeWordListener.start() }
+                        }
                     }
                 }
                 .onOpenURL { url in
@@ -35,6 +53,7 @@ struct MetaObsidianApp: App {
                     if url.host == ObsidianClient.returnCallbackHost {
                         print("Returned from Obsidian after saving")
                         audioRecorder.savedToObsidian = true
+                        Task { await wakeWordListener.start() }
                         return
                     }
 

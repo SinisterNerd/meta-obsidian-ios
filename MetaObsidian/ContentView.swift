@@ -4,14 +4,32 @@ struct ContentView: View {
     @EnvironmentObject private var wearables: WearablesManager
     @EnvironmentObject private var audioRecorder: AudioRecorder
     @EnvironmentObject private var wakeWordListener: WakeWordListener
+    @EnvironmentObject private var realtimeClient: RealtimeVoiceClient
     @Environment(\.openURL) private var openURL
     @State private var obsidianError: String?
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Meta Obsidian")
-                .font(.title)
+        ScrollView {
+            VStack(spacing: 16) {
+                Text("Meta Obsidian")
+                    .font(.title)
 
+                wakeWordSection
+                Divider()
+                wearablesSection
+                Divider()
+                recordingSection
+                Divider()
+                saveSection
+                Divider()
+                realtimeSection
+            }
+            .padding()
+        }
+    }
+
+    private var wakeWordSection: some View {
+        Group {
             Button(wakeWordListener.isListening ? "Stop Listening for Wake Word" : "Start Listening for Wake Word") {
                 Task {
                     if wakeWordListener.isListening {
@@ -38,7 +56,11 @@ struct ContentView: View {
                     .font(.footnote)
                     .padding(.horizontal)
             }
+        }
+    }
 
+    private var wearablesSection: some View {
+        Group {
             Text("Registration: \(wearables.registrationState?.description ?? "nil")")
             Text("Devices: \(wearables.devices.count)")
             ForEach(wearables.devices, id: \.self) { id in
@@ -51,25 +73,23 @@ struct ContentView: View {
             Button("Register with Meta AI app") {
                 wearables.startRegistration()
             }
-
             Button("Request camera permission") {
                 Task { await wearables.requestCameraPermission() }
             }
-
             Button("Connect") {
                 Task { await wearables.connect() }
             }
-
             Button("Disconnect") {
                 wearables.disconnect()
             }
-
             Button("Update Firmware") {
                 wearables.updateFirmware()
             }
+        }
+    }
 
-            Divider()
-
+    private var recordingSection: some View {
+        Group {
             Button(audioRecorder.isRecording ? "Stop Recording" : "Start Recording") {
                 Task {
                     if audioRecorder.isRecording {
@@ -111,9 +131,11 @@ struct ContentView: View {
                     .font(.footnote)
                     .padding(.horizontal)
             }
+        }
+    }
 
-            Divider()
-
+    private var saveSection: some View {
+        Group {
             Button("Save to Daily Note") {
                 var content = "**You:** \(audioRecorder.transcript)"
                 if !audioRecorder.assistantReply.isEmpty {
@@ -145,7 +167,45 @@ struct ContentView: View {
                     .padding(.horizontal)
             }
         }
-        .padding()
+    }
+
+    private var realtimeSection: some View {
+        Group {
+            Text("Realtime Voice").font(.headline)
+
+            Button(realtimeClient.isActive ? "End Conversation" : "Start Voice Conversation") {
+                Task {
+                    if realtimeClient.isActive {
+                        realtimeClient.stop()
+                    } else {
+                        await realtimeClient.start()
+                    }
+                }
+            }
+
+            if realtimeClient.isActive {
+                Text(realtimeClient.isResponding ? "Assistant responding…" : "Listening…")
+                    .font(.footnote)
+            }
+
+            if !realtimeClient.userTranscript.isEmpty {
+                Text("You: \(realtimeClient.userTranscript)")
+                    .padding(.horizontal)
+            }
+
+            if !realtimeClient.assistantTranscript.isEmpty {
+                Text("Assistant: \(realtimeClient.assistantTranscript)")
+                    .padding(.horizontal)
+                    .foregroundColor(.blue)
+            }
+
+            if let error = realtimeClient.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+                    .padding(.horizontal)
+            }
+        }
     }
 }
 
@@ -154,4 +214,5 @@ struct ContentView: View {
         .environmentObject(WearablesManager())
         .environmentObject(AudioRecorder())
         .environmentObject(WakeWordListener())
+        .environmentObject(RealtimeVoiceClient())
 }
