@@ -12,7 +12,7 @@ struct ContentView: View {
             Text("Registration: \(wearables.registrationState?.description ?? "nil")")
             Text("Devices: \(wearables.devices.count)")
             ForEach(wearables.devices, id: \.self) { id in
-                Text("  \(id.prefix(8)): \(wearables.linkStates[id].map(String.init(describing:)) ?? "unknown")")
+                Text("  \(id.prefix(8)): \(wearables.linkStates[id].map(String.init(describing:)) ?? "unknown"), \(wearables.compatibilities[id]?.displayString ?? "unknown")")
                     .font(.footnote)
             }
             Text("Camera permission: \(String(describing: wearables.cameraPermission))")
@@ -32,6 +32,10 @@ struct ContentView: View {
 
             Button("Disconnect") {
                 wearables.disconnect()
+            }
+
+            Button("Update Firmware") {
+                wearables.updateFirmware()
             }
 
             Divider()

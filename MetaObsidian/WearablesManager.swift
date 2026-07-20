@@ -9,9 +9,10 @@ final class WearablesManager: ObservableObject {
     @Published var cameraPermission: PermissionStatus = .denied
     @Published var sessionState: DeviceSessionState?
     @Published var linkStates: [DeviceIdentifier: LinkState] = [:]
+    @Published var compatibilities: [DeviceIdentifier: Compatibility] = [:]
 
     private var session: DeviceSession?
-    private var linkStateTokens: [any AnyListenerToken] = []
+    private var deviceListenerTokens: [any AnyListenerToken] = []
 
     init() {
         registrationState = Wearables.shared.registrationState
@@ -74,6 +75,16 @@ final class WearablesManager: ObservableObject {
         session = nil
     }
 
+    func updateFirmware() {
+        Task {
+            do {
+                try await Wearables.shared.openFirmwareUpdate()
+            } catch {
+                print("openFirmwareUpdate failed: \(error)")
+            }
+        }
+    }
+
     private func observeRegistrationState() async {
         print("observeRegistrationState: starting to listen")
         for await state in Wearables.shared.registrationStateStream() {
@@ -94,8 +105,8 @@ final class WearablesManager: ObservableObject {
     }
 
     private func watchLinkStates(for deviceIds: [DeviceIdentifier]) {
-        let tokensToCancel = linkStateTokens
-        linkStateTokens.removeAll()
+        let tokensToCancel = deviceListenerTokens
+        deviceListenerTokens.removeAll()
         Task { for token in tokensToCancel { await token.cancel() } }
 
         for id in deviceIds {
@@ -103,16 +114,25 @@ final class WearablesManager: ObservableObject {
                 print("watchLinkStates: no Device object for \(id)")
                 continue
             }
-            print("watchLinkStates: \(id) name=\(device.nameOrId()) initial linkState=\(device.linkState) compatibility=\(device.compatibility())")
+            print("watchLinkStates: \(id) name=\(device.nameOrId()) initial linkState=\(device.linkState) compatibility=\(device.compatibility().displayString)")
             linkStates[id] = device.linkState
+            compatibilities[id] = device.compatibility()
 
-            let token = device.addLinkStateListener { [weak self] state in
+            let linkToken = device.addLinkStateListener { [weak self] state in
                 Task { @MainActor in
                     print("linkState changed for \(id): \(state)")
                     self?.linkStates[id] = state
                 }
             }
-            linkStateTokens.append(token)
+            deviceListenerTokens.append(linkToken)
+
+            let compatToken = device.addCompatibilityListener { [weak self] compatibility in
+                Task { @MainActor in
+                    print("compatibility changed for \(id): \(compatibility.displayString)")
+                    self?.compatibilities[id] = compatibility
+                }
+            }
+            deviceListenerTokens.append(compatToken)
         }
     }
 }
