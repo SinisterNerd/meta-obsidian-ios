@@ -8,7 +8,7 @@ struct ContentView: View {
             Text("Meta Obsidian")
                 .font(.title)
 
-            Text("Registration: \(String(describing: wearables.registrationState))")
+            Text("Registration: \(wearables.registrationState?.description ?? "nil")")
             Text("Devices: \(wearables.devices.count)")
             Text("Camera permission: \(String(describing: wearables.cameraPermission))")
             Text("Session: \(String(describing: wearables.sessionState))")
