@@ -11,6 +11,10 @@ struct ContentView: View {
 
             Text("Registration: \(wearables.registrationState?.description ?? "nil")")
             Text("Devices: \(wearables.devices.count)")
+            ForEach(wearables.devices, id: \.self) { id in
+                Text("  \(id.prefix(8)): \(wearables.linkStates[id].map(String.init(describing:)) ?? "unknown")")
+                    .font(.footnote)
+            }
             Text("Camera permission: \(String(describing: wearables.cameraPermission))")
             Text("Session: \(String(describing: wearables.sessionState))")
 

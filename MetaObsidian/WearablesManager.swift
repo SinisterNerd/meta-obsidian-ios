@@ -8,12 +8,15 @@ final class WearablesManager: ObservableObject {
     @Published var devices: [DeviceIdentifier] = []
     @Published var cameraPermission: PermissionStatus = .denied
     @Published var sessionState: DeviceSessionState?
+    @Published var linkStates: [DeviceIdentifier: LinkState] = [:]
 
     private var session: DeviceSession?
+    private var linkStateTokens: [any AnyListenerToken] = []
 
     init() {
         registrationState = Wearables.shared.registrationState
         devices = Wearables.shared.devices
+        watchLinkStates(for: devices)
         Task { await observeRegistrationState() }
         Task { await observeDevices() }
         Task {
@@ -72,8 +75,32 @@ final class WearablesManager: ObservableObject {
         for await devices in Wearables.shared.devicesStream() {
             print("observeDevices: received \(devices)")
             self.devices = devices
+            watchLinkStates(for: devices)
         }
         print("observeDevices: stream ended")
+    }
+
+    private func watchLinkStates(for deviceIds: [DeviceIdentifier]) {
+        let tokensToCancel = linkStateTokens
+        linkStateTokens.removeAll()
+        Task { for token in tokensToCancel { await token.cancel() } }
+
+        for id in deviceIds {
+            guard let device = Wearables.shared.deviceForIdentifier(id) else {
+                print("watchLinkStates: no Device object for \(id)")
+                continue
+            }
+            print("watchLinkStates: \(id) name=\(device.nameOrId()) initial linkState=\(device.linkState) compatibility=\(device.compatibility())")
+            linkStates[id] = device.linkState
+
+            let token = device.addLinkStateListener { [weak self] state in
+                Task { @MainActor in
+                    print("linkState changed for \(id): \(state)")
+                    self?.linkStates[id] = state
+                }
+            }
+            linkStateTokens.append(token)
+        }
     }
 }
 
