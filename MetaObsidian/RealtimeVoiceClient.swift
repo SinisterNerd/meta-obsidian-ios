@@ -34,9 +34,9 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
 
     var onConversationEnded: ((_ transcript: String) -> Void)?
 
-    // TODO: make configurable
+    // TODO: make stop phrases configurable too
     var stopPhrases = ["stop", "that's all", "that is all", "goodbye", "end conversation"]
-    var silenceTimeoutSeconds: TimeInterval = 8
+    var silenceTimeoutSeconds: TimeInterval = SettingsKeys.defaultSilenceTimeoutSeconds
 
     private let realtimeSampleRate: Double = 24000
     private let engine = AVAudioEngine()
@@ -64,6 +64,8 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
         conversationShouldEndAfterThisTurn = false
         silenceTimer?.cancel()
         silenceTimer = nil
+        let storedTimeout = UserDefaults.standard.double(forKey: SettingsKeys.silenceTimeoutSeconds)
+        silenceTimeoutSeconds = storedTimeout > 0 ? storedTimeout : SettingsKeys.defaultSilenceTimeoutSeconds
 
         guard
             let apiKey = Bundle.main.object(forInfoDictionaryKey: "AssistantAPIKey") as? String,

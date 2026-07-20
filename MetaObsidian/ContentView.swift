@@ -7,12 +7,17 @@ struct ContentView: View {
     @EnvironmentObject private var realtimeClient: RealtimeVoiceClient
     @Environment(\.openURL) private var openURL
     @State private var obsidianError: String?
+    @State private var showingSettings = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
                 Text("Meta Obsidian")
                     .font(.title)
+
+                Button("Settings") {
+                    showingSettings = true
+                }
 
                 wakeWordSection
                 Divider()
@@ -25,6 +30,9 @@ struct ContentView: View {
                 realtimeSection
             }
             .padding()
+        }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
         }
     }
 

@@ -12,8 +12,7 @@ final class WakeWordListener: ObservableObject {
     @Published var errorMessage: String?
     @Published var lastPartialTranscript = ""
 
-    // TODO: make configurable
-    var wakePhrase = "hey obsidian"
+    var wakePhrase = SettingsKeys.defaultWakePhrase
     var onWakeWordDetected: (() -> Void)?
 
     private let engine = AVAudioEngine()
@@ -25,6 +24,7 @@ final class WakeWordListener: ObservableObject {
     func start() async {
         guard !isListening else { return }
         errorMessage = nil
+        wakePhrase = (UserDefaults.standard.string(forKey: SettingsKeys.wakePhrase) ?? SettingsKeys.defaultWakePhrase).lowercased()
 
         guard let recognizer, recognizer.isAvailable else {
             errorMessage = "Speech recognizer unavailable"
