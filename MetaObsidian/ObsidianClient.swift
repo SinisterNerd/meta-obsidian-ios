@@ -6,8 +6,8 @@ enum ObsidianClient {
 
     static func dailyNoteAppendURL(content: String) -> URL? {
         let vault = percentEncode(vaultName)
-        let appendContent = percentEncode("\n\n" + content)
-        let urlString = "obsidian://daily?vault=\(vault)&append=\(appendContent)&silent=true"
+        let encodedContent = percentEncode("\n\n" + content)
+        let urlString = "obsidian://daily?vault=\(vault)&content=\(encodedContent)&append=true&silent=true"
         return URL(string: urlString)
     }
 
