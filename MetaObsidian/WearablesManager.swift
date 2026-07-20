@@ -47,8 +47,21 @@ final class WearablesManager: ObservableObject {
             let selector = AutoDeviceSelector(wearables: Wearables.shared)
             let session = try Wearables.shared.createSession(deviceSelector: selector)
             self.session = session
+            print("connect: session created, state=\(session.state)")
+            sessionState = session.state
+
             try session.start()
+            print("connect: session.start() returned, state=\(session.state)")
+            sessionState = session.state
+
+            Task {
+                for await error in session.errorStream() {
+                    print("session errorStream: \(error)")
+                }
+            }
+
             for await state in session.stateStream() {
+                print("sessionState changed: \(state)")
                 sessionState = state
             }
         } catch {
