@@ -5,13 +5,26 @@ import AVFoundation
 // audio out over a WebSocket, plays the model's spoken reply back through the
 // glasses speaker, and accumulates both sides' text transcripts.
 //
-// Protocol notes (see AGENTS.md / project history): confirmed against OpenAI's docs —
-// input_audio_buffer.append, response.create, response.output_audio.delta,
-// response.output_audio_transcript.delta, response.done, all at 24kHz PCM16.
-// NOT independently confirmed — the exact event name/shape for the *user's*
-// transcribed speech; "conversation.item.input_audio_transcription.completed" is
-// my best guess from the docs. Any event type we don't recognize gets printed, so
-// on-device testing should reveal the real name quickly if this guess is wrong.
+// Protocol notes, confirmed on-device (not just from docs):
+// - Mic audio streaming works — server-side VAD (input_audio_buffer.speech_started/
+//   stopped) correctly detects real speech in our resampled 8kHz->24kHz PCM16 audio.
+// - response.output_audio_transcript.delta correctly accumulates the assistant's
+//   spoken reply as text.
+// - session.audio.input/output.format must be an object — {"type": "audio/pcm",
+//   "rate": 24000} — NOT a bare "pcm16" string. Sending it wrong doesn't kill the
+//   connection, it just silently rejects the whole session.update (including
+//   instructions and transcription config) while the session keeps running on
+//   defaults, which is a confusing failure mode to debug from behavior alone.
+//
+// NOT yet confirmed: the event name/shape for the *user's* transcribed speech —
+// transcription was never actually enabled in the one real test run so far (the
+// format bug above blocked the session.update that would've turned it on).
+// "conversation.item.input_audio_transcription.completed" is still just a guess.
+// Any event type we don't recognize gets printed, so the next on-device test
+// should reveal the real name if this guess is wrong.
+//
+// Also unconfirmed: whether playback audio is actually audible through the
+// glasses speaker (no errors during conversion, but that doesn't prove it's heard).
 @MainActor
 final class RealtimeVoiceClient: NSObject, ObservableObject {
     @Published var isActive = false
@@ -87,10 +100,12 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
                 "instructions": "You are a concise voice assistant speaking through smart glasses. Keep answers short.",
                 "audio": [
                     "input": [
-                        "format": "pcm16",
+                        "format": ["type": "audio/pcm", "rate": realtimeSampleRate],
                         "transcription": ["model": "whisper-1"]
                     ],
-                    "output": ["format": "pcm16"]
+                    "output": [
+                        "format": ["type": "audio/pcm", "rate": realtimeSampleRate]
+                    ]
                 ]
             ]
         ]
