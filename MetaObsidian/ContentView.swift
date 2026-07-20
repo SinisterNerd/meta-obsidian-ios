@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var wearables: WearablesManager
     @EnvironmentObject private var audioRecorder: AudioRecorder
+    @EnvironmentObject private var wakeWordListener: WakeWordListener
     @Environment(\.openURL) private var openURL
     @State private var obsidianError: String?
 
@@ -10,6 +11,33 @@ struct ContentView: View {
         VStack(spacing: 16) {
             Text("Meta Obsidian")
                 .font(.title)
+
+            Button(wakeWordListener.isListening ? "Stop Listening for Wake Word" : "Start Listening for Wake Word") {
+                Task {
+                    if wakeWordListener.isListening {
+                        wakeWordListener.stop()
+                    } else {
+                        await wakeWordListener.start()
+                    }
+                }
+            }
+
+            if wakeWordListener.isListening {
+                Text("Listening for \"\(wakeWordListener.wakePhrase)\"…")
+                    .font(.footnote)
+                if !wakeWordListener.lastPartialTranscript.isEmpty {
+                    Text(wakeWordListener.lastPartialTranscript)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            if let error = wakeWordListener.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+                    .padding(.horizontal)
+            }
 
             Text("Registration: \(wearables.registrationState?.description ?? "nil")")
             Text("Devices: \(wearables.devices.count)")
@@ -125,4 +153,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(WearablesManager())
         .environmentObject(AudioRecorder())
+        .environmentObject(WakeWordListener())
 }

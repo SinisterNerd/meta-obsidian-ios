@@ -21,23 +21,14 @@ final class AudioRecorder: ObservableObject {
         assistantReply = ""
         savedToObsidian = false
 
-        let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .allowBluetoothA2DP])
-            try session.setActive(true)
-
-            if let hfpInput = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) {
-                try session.setPreferredInput(hfpInput)
-            } else {
-                errorMessage = "No Bluetooth HFP input found — is the glasses mic connected?"
-            }
+            try BluetoothAudioSession.configure()
         } catch {
-            errorMessage = "Audio session setup failed: \(error)"
+            errorMessage = error.localizedDescription
             return
         }
 
-        // Per Meta's docs: wait for the Bluetooth HFP route to stabilize before tapping.
-        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        try? await Task.sleep(nanoseconds: BluetoothAudioSession.routeStabilizationDelayNanoseconds)
 
         let inputNode = engine.inputNode
         let format = inputNode.inputFormat(forBus: 0)

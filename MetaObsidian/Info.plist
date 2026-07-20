@@ -63,6 +63,7 @@
 	<array>
 		<string>bluetooth-peripheral</string>
 		<string>external-accessory</string>
+		<string>audio</string>
 	</array>
 
 	<key>NSBluetoothAlwaysUsageDescription</key>
@@ -71,6 +72,8 @@
 	<string>Meta Obsidian uses the glasses camera to capture context for your notes.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Meta Obsidian uses the glasses microphone to transcribe voice notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Meta Obsidian listens on-device for your wake phrase to start a conversation hands-free.</string>
 
 	<key>WhisperAPIKey</key>
 	<string>$(WHISPER_API_KEY)</string>
