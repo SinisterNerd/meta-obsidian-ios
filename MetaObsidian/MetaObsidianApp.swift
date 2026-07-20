@@ -4,6 +4,7 @@ import MWDATCore
 @main
 struct MetaObsidianApp: App {
     @StateObject private var wearables = WearablesManager()
+    @StateObject private var audioRecorder = AudioRecorder()
 
     init() {
         do {
@@ -19,6 +20,7 @@ struct MetaObsidianApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(wearables)
+                .environmentObject(audioRecorder)
                 .onOpenURL { url in
                     print("onOpenURL received: \(url)")
                     Task {

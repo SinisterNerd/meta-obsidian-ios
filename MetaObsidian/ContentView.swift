@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var wearables: WearablesManager
+    @EnvironmentObject private var audioRecorder: AudioRecorder
 
     var body: some View {
         VStack(spacing: 16) {
@@ -28,11 +29,42 @@ struct ContentView: View {
             Button("Disconnect") {
                 wearables.disconnect()
             }
+
+            Divider()
+
+            Button(audioRecorder.isRecording ? "Stop Recording" : "Start Recording") {
+                Task {
+                    if audioRecorder.isRecording {
+                        await audioRecorder.stopRecording()
+                    } else {
+                        await audioRecorder.startRecording()
+                    }
+                }
+            }
+            .disabled(audioRecorder.isTranscribing)
+
+            if audioRecorder.isTranscribing {
+                Text("Transcribing…")
+            }
+
+            if !audioRecorder.transcript.isEmpty {
+                Text(audioRecorder.transcript)
+                    .padding(.horizontal)
+            }
+
+            if let error = audioRecorder.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+                    .padding(.horizontal)
+            }
         }
         .padding()
     }
 }
 
 #Preview {
-    ContentView().environmentObject(WearablesManager())
+    ContentView()
+        .environmentObject(WearablesManager())
+        .environmentObject(AudioRecorder())
 }

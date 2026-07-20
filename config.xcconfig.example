@@ -7,3 +7,6 @@ CLIENT_TOKEN = your-client-token
 
 // Your Apple Developer Team ID (Xcode > Settings > Accounts)
 DEVELOPMENT_TEAM = your-apple-team-id
+
+// OpenAI API key with access to the Whisper transcription endpoint
+WHISPER_API_KEY = your-openai-api-key

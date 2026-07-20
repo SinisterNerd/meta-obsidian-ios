@@ -71,5 +71,8 @@
 	<string>Meta Obsidian uses the glasses camera to capture context for your notes.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Meta Obsidian uses the glasses microphone to transcribe voice notes.</string>
+
+	<key>WhisperAPIKey</key>
+	<string>$(WHISPER_API_KEY)</string>
 </dict>
 </plist>
