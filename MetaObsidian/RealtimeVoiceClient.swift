@@ -23,6 +23,13 @@ import AVFoundation
 // - response.done can fire before queued audio has actually finished playing —
 //   must wait for playback to drain (.dataPlayedBack completion) before treating
 //   a turn as finished, or replies get audibly cut off.
+//
+// NOT yet confirmed on-device: the save_note_metadata function-calling path
+// (tool definition in session.update, function_call parsed out of response.done's
+// output array, function_call_output ack via conversation.item.create). Built
+// from docs only — the earlier protocol notes above are all things the docs got
+// subtly wrong in some way, so treat this the same way until it's been watched
+// happen for real.
 @MainActor
 final class RealtimeVoiceClient: NSObject, ObservableObject {
     @Published var isActive = false
@@ -52,6 +59,8 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
     private var awaitingPlaybackDrain = false
     private var conversationShouldEndAfterThisTurn = false
     private var silenceTimer: DispatchWorkItem?
+    private var noteSubject: String?
+    private var noteTags: [String] = []
 
     func start() async {
         guard !isActive else { return }
@@ -62,6 +71,8 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
         pendingPlaybackBuffers = 0
         awaitingPlaybackDrain = false
         conversationShouldEndAfterThisTurn = false
+        noteSubject = nil
+        noteTags = []
         silenceTimer?.cancel()
         silenceTimer = nil
         let storedTimeout = UserDefaults.standard.double(forKey: SettingsKeys.silenceTimeoutSeconds)
@@ -104,7 +115,25 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
         stopAudioIO()
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
-        onConversationEnded?(conversationTranscript)
+        onConversationEnded?(buildFinalNoteContent())
+    }
+
+    private func buildFinalNoteContent() -> String {
+        guard !conversationTranscript.isEmpty else { return "" }
+
+        var header = ""
+        if let subject = noteSubject, !subject.isEmpty {
+            header += "Subject: \(subject)\n"
+        }
+        if !noteTags.isEmpty {
+            let hashtags = noteTags.map { "#\($0.replacingOccurrences(of: " ", with: "-"))" }.joined(separator: " ")
+            header += "Tags: \(hashtags)\n"
+        }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd h:mm a"
+        header += "Date: \(dateFormatter.string(from: Date()))\n"
+
+        return header + "\n" + conversationTranscript
     }
 
     // MARK: - WebSocket
@@ -114,7 +143,13 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
             "type": "session.update",
             "session": [
                 "type": "realtime",
-                "instructions": "You are a concise voice assistant speaking through smart glasses. Keep answers short.",
+                "instructions": """
+                You are a concise voice assistant speaking through smart glasses. Keep answers short.
+                Near the end of the conversation, ask the user if they'd like to add a subject and \
+                tags to this note. If they say yes, ask what they'd like, then call \
+                save_note_metadata with what they said. If they say no or don't want to, don't call \
+                the function at all.
+                """,
                 "audio": [
                     "input": [
                         "format": ["type": "audio/pcm", "rate": realtimeSampleRate],
@@ -123,10 +158,59 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
                     "output": [
                         "format": ["type": "audio/pcm", "rate": realtimeSampleRate]
                     ]
-                ]
+                ],
+                "tools": [
+                    [
+                        "type": "function",
+                        "name": "save_note_metadata",
+                        "description": "Call this once, near the end of the conversation, after asking the user whether they'd like a subject and tags for this note and hearing a yes with details. Do not call this if the user declines.",
+                        "parameters": [
+                            "type": "object",
+                            "properties": [
+                                "subject": [
+                                    "type": "string",
+                                    "description": "A short (5-10 word) description of what this note is about."
+                                ],
+                                "tags": [
+                                    "type": "array",
+                                    "items": ["type": "string"],
+                                    "description": "Short lowercase tag words for categorizing this note, without the # symbol, e.g. [\"followup\", \"shopping\"]."
+                                ]
+                            ],
+                            "required": ["subject", "tags"]
+                        ]
+                    ]
+                ],
+                "tool_choice": "auto"
             ]
         ]
         send(json: event)
+    }
+
+    private func handleFunctionCall(name: String, callId: String, argumentsJSON: String) {
+        guard name == "save_note_metadata" else { return }
+
+        if
+            let data = argumentsJSON.data(using: .utf8),
+            let args = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        {
+            noteSubject = args["subject"] as? String
+            noteTags = (args["tags"] as? [String]) ?? []
+            print("save_note_metadata called: subject=\(noteSubject ?? "") tags=\(noteTags)")
+        }
+
+        // Required by the API even though we don't need the model to do anything
+        // further with the result — without this the model may consider the turn
+        // incomplete. We don't bother sending a follow-up response.create since
+        // we're ending the conversation right after this regardless.
+        send(json: [
+            "type": "conversation.item.create",
+            "item": [
+                "type": "function_call_output",
+                "call_id": callId,
+                "output": "{\"status\":\"ok\"}"
+            ]
+        ])
     }
 
     private func send(json: [String: Any]) {
@@ -209,6 +293,23 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
             silenceTimer?.cancel()
             silenceTimer = nil
         case "response.done":
+            // Function calls (e.g. save_note_metadata) show up as items in
+            // response.done's output array, not as their own top-level event.
+            if
+                let response = json["response"] as? [String: Any],
+                let output = response["output"] as? [[String: Any]]
+            {
+                for item in output {
+                    if
+                        let itemType = item["type"] as? String, itemType == "function_call",
+                        let name = item["name"] as? String,
+                        let callId = item["call_id"] as? String,
+                        let arguments = item["arguments"] as? String
+                    {
+                        handleFunctionCall(name: name, callId: callId, argumentsJSON: arguments)
+                    }
+                }
+            }
             // Don't tear down immediately — the model can finish generating (and
             // finish sending transcript deltas) before the audio already queued in
             // the player has actually finished playing. Wait for playback to drain.
