@@ -238,9 +238,18 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
                         self.listenForServerEvents()
                     }
                 case .failure(let error):
-                    print("RealtimeVoiceClient receive error: \(error)")
-                    self.errorMessage = "Connection error: \(error.localizedDescription)"
-                    self.stop()
+                    // A receive() in flight when we intentionally cancel the socket
+                    // (stop() at the end of a normal conversation) fails as a direct
+                    // side effect of that cancellation — not a real problem. Only
+                    // treat this as a genuine error if we didn't already know we
+                    // were stopping.
+                    if self.isActive {
+                        print("RealtimeVoiceClient receive error: \(error)")
+                        self.errorMessage = "Connection error: \(error.localizedDescription)"
+                        self.stop()
+                    } else {
+                        print("RealtimeVoiceClient receive error after intentional stop (expected): \(error)")
+                    }
                 }
             }
         }
