@@ -148,7 +148,7 @@ struct ContentView: View {
                 }
             } label: {
                 Label(
-                    realtimeClient.isActive ? "End Conversation" : "Talk Now",
+                    realtimeClient.isActive ? "End Conversation" : "Record a Note",
                     systemImage: realtimeClient.isActive ? "stop.circle.fill" : "mic.fill"
                 )
                 .frame(maxWidth: .infinity)
