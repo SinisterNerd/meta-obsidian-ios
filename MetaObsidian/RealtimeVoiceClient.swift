@@ -182,15 +182,32 @@ final class RealtimeVoiceClient: NSObject, ObservableObject {
             if let delta = json["delta"] as? String {
                 currentAssistantTurn += delta
             }
+        case "conversation.item.input_audio_transcription.delta":
+            // The reliable source for the user's transcribed speech — .completed
+            // (below) isn't guaranteed to arrive before the conversation ends.
+            if let delta = json["delta"] as? String {
+                currentUserTurn += delta
+                if containsStopPhrase(currentUserTurn) {
+                    conversationShouldEndAfterThisTurn = true
+                }
+            }
         case "conversation.item.input_audio_transcription.completed":
-            if let transcript = json["transcript"] as? String {
-                currentUserTurn += transcript
+            // When it does arrive, it's the authoritative full transcript for the
+            // turn (not incremental) — replace, don't append, or we'd duplicate
+            // whatever the .delta events above already accumulated.
+            if let transcript = json["transcript"] as? String, !transcript.isEmpty {
+                currentUserTurn = transcript
                 if containsStopPhrase(transcript) {
                     conversationShouldEndAfterThisTurn = true
                 }
             }
         case "response.created":
             isResponding = true
+            // Belt-and-suspenders alongside the speech_started cancellation below —
+            // if the model is actively responding, the conversation obviously isn't
+            // silent, regardless of what triggered this response.
+            silenceTimer?.cancel()
+            silenceTimer = nil
         case "response.done":
             // Don't tear down immediately — the model can finish generating (and
             // finish sending transcript deltas) before the audio already queued in
