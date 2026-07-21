@@ -7,7 +7,6 @@ final class AudioRecorder: ObservableObject {
     @Published var isTranscribing = false
     @Published var transcript = ""
     @Published var errorMessage: String?
-    @Published var savedToObsidian = false
     @Published var assistantReply = ""
     @Published var isAsking = false
 
@@ -19,7 +18,6 @@ final class AudioRecorder: ObservableObject {
         errorMessage = nil
         transcript = ""
         assistantReply = ""
-        savedToObsidian = false
 
         do {
             try BluetoothAudioSession.configure()

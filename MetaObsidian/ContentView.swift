@@ -1,13 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject private var wearables: WearablesManager
     @EnvironmentObject private var audioRecorder: AudioRecorder
     @EnvironmentObject private var wakeWordListener: WakeWordListener
     @EnvironmentObject private var realtimeClient: RealtimeVoiceClient
-    @Environment(\.openURL) private var openURL
-    @State private var obsidianError: String?
+    @EnvironmentObject private var vaultManager: VaultManager
     @State private var showingSettings = false
+    @State private var showingVaultPicker = false
 
     var body: some View {
         ScrollView {
@@ -33,6 +34,14 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
+        }
+        .fileImporter(isPresented: $showingVaultPicker, allowedContentTypes: [.folder]) { result in
+            switch result {
+            case .success(let url):
+                vaultManager.setVaultFolder(url)
+            case .failure(let error):
+                vaultManager.errorMessage = "Folder selection failed: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -144,32 +153,29 @@ struct ContentView: View {
 
     private var saveSection: some View {
         Group {
-            Button("Save to Daily Note") {
+            Text("Vault: \(vaultManager.vaultURL?.lastPathComponent ?? "not selected")")
+
+            Button("Choose Vault Folder") {
+                showingVaultPicker = true
+            }
+
+            Button("Save Note") {
                 var content = "**You:** \(audioRecorder.transcript)"
                 if !audioRecorder.assistantReply.isEmpty {
                     content += "\n\n**Assistant:** \(audioRecorder.assistantReply)"
                 }
-                guard let url = ObsidianClient.dailyNoteAppendURL(content: content) else {
-                    obsidianError = "Couldn't build Obsidian URI"
-                    return
-                }
-                audioRecorder.savedToObsidian = false
-                openURL(url) { accepted in
-                    if !accepted {
-                        obsidianError = "Obsidian didn't open — is it installed?"
-                    }
-                }
+                vaultManager.saveNote(content)
             }
-            .disabled(audioRecorder.transcript.isEmpty)
+            .disabled(audioRecorder.transcript.isEmpty || vaultManager.vaultURL == nil)
 
-            if audioRecorder.savedToObsidian {
-                Text("Saved ✓")
+            if let filename = vaultManager.lastSavedFilename {
+                Text("Saved: \(filename)")
                     .foregroundColor(.green)
                     .font(.footnote)
             }
 
-            if let obsidianError {
-                Text(obsidianError)
+            if let error = vaultManager.errorMessage {
+                Text(error)
                     .foregroundColor(.red)
                     .font(.footnote)
                     .padding(.horizontal)
@@ -230,4 +236,5 @@ struct ContentView: View {
         .environmentObject(AudioRecorder())
         .environmentObject(WakeWordListener())
         .environmentObject(RealtimeVoiceClient())
+        .environmentObject(VaultManager())
 }

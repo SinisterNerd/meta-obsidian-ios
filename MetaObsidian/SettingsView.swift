@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage(SettingsKeys.wakePhrase) private var wakePhrase = SettingsKeys.defaultWakePhrase
     @AppStorage(SettingsKeys.silenceTimeoutSeconds) private var silenceTimeoutSeconds = SettingsKeys.defaultSilenceTimeoutSeconds
+    @AppStorage(SettingsKeys.vaultSubfolder) private var vaultSubfolder = SettingsKeys.defaultVaultSubfolder
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -22,6 +23,14 @@ struct SettingsView: View {
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }
+
+                Section("Vault") {
+                    TextField("Folder name", text: $vaultSubfolder)
+                        .autocorrectionDisabled()
+                    Text("Notes are saved as new files in this folder, created at the root of your chosen vault folder. Takes effect on the next save.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
             }
             .navigationTitle("Settings")
             .toolbar {
@@ -37,9 +46,11 @@ struct SettingsView: View {
 enum SettingsKeys {
     static let wakePhrase = "wakePhrase"
     static let silenceTimeoutSeconds = "silenceTimeoutSeconds"
+    static let vaultSubfolder = "vaultSubfolder"
 
     static let defaultWakePhrase = "hey obsidian"
     static let defaultSilenceTimeoutSeconds = 8.0
+    static let defaultVaultSubfolder = "metaObsidian"
 }
 
 #Preview {
