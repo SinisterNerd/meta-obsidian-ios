@@ -1,53 +1,121 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @EnvironmentObject private var wearables: WearablesManager
-    @EnvironmentObject private var audioRecorder: AudioRecorder
     @EnvironmentObject private var wakeWordListener: WakeWordListener
     @EnvironmentObject private var realtimeClient: RealtimeVoiceClient
     @EnvironmentObject private var vaultManager: VaultManager
     @State private var showingSettings = false
-    @State private var showingVaultPicker = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                Text("Meta Obsidian")
-                    .font(.title)
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 20) {
+                    statusCard
 
-                Button("Settings") {
-                    showingSettings = true
+                    if realtimeClient.isActive {
+                        conversationCard
+                    }
+
+                    controls
+
+                    if let filename = vaultManager.lastSavedFilename {
+                        savedCard(filename)
+                    }
+
+                    if let error = currentError {
+                        errorCard(error)
+                    }
                 }
-
-                wakeWordSection
-                Divider()
-                wearablesSection
-                Divider()
-                recordingSection
-                Divider()
-                saveSection
-                Divider()
-                realtimeSection
+                .padding()
             }
-            .padding()
+            .navigationTitle("Meta Obsidian")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                    }
+                }
+            }
         }
+        .navigationViewStyle(.stack)
+        .tint(.obsidianPurple)
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
-        .fileImporter(isPresented: $showingVaultPicker, allowedContentTypes: [.folder]) { result in
-            switch result {
-            case .success(let url):
-                vaultManager.setVaultFolder(url)
-            case .failure(let error):
-                vaultManager.errorMessage = "Folder selection failed: \(error.localizedDescription)"
-            }
-        }
     }
 
-    private var wakeWordSection: some View {
-        Group {
-            Button(wakeWordListener.isListening ? "Stop Listening for Wake Word" : "Start Listening for Wake Word") {
+    private var currentError: String? {
+        wakeWordListener.errorMessage ?? realtimeClient.errorMessage ?? vaultManager.errorMessage
+    }
+
+    // MARK: - Status
+
+    private var statusIcon: String {
+        if realtimeClient.isActive { return "waveform" }
+        if wakeWordListener.isListening { return "ear.fill" }
+        return "moon.zzz.fill"
+    }
+
+    private var statusColor: Color {
+        if realtimeClient.isActive { return .obsidianPurple }
+        if wakeWordListener.isListening { return .green }
+        return .secondary
+    }
+
+    private var statusText: String {
+        if realtimeClient.isActive {
+            return realtimeClient.isResponding ? "Responding…" : "Listening to you…"
+        }
+        if wakeWordListener.isListening {
+            return "Listening for \"\(wakeWordListener.wakePhrase)\""
+        }
+        return "Idle"
+    }
+
+    private var statusCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: statusIcon)
+                .font(.system(size: 44))
+                .foregroundColor(statusColor)
+            Text(statusText)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(28)
+        .background(statusColor.opacity(0.12))
+        .cornerRadius(20)
+    }
+
+    // MARK: - Active conversation
+
+    private var conversationCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !realtimeClient.currentUserTurn.isEmpty {
+                Label(realtimeClient.currentUserTurn, systemImage: "person.fill")
+            }
+            if !realtimeClient.currentAssistantTurn.isEmpty {
+                Label(realtimeClient.currentAssistantTurn, systemImage: "sparkles")
+                    .foregroundColor(.obsidianPurple)
+            }
+            if realtimeClient.currentUserTurn.isEmpty && realtimeClient.currentAssistantTurn.isEmpty {
+                Text("…")
+                    .foregroundColor(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(16)
+    }
+
+    // MARK: - Controls
+
+    private var controls: some View {
+        VStack(spacing: 12) {
+            Button {
                 Task {
                     if wakeWordListener.isListening {
                         wakeWordListener.stop()
@@ -55,178 +123,54 @@ struct ContentView: View {
                         await wakeWordListener.start()
                     }
                 }
+            } label: {
+                Label(
+                    wakeWordListener.isListening ? "Stop Listening" : "Start Listening",
+                    systemImage: wakeWordListener.isListening ? "ear.trianglebadge.exclamationmark" : "ear.fill"
+                )
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .disabled(realtimeClient.isActive)
 
-            if wakeWordListener.isListening {
-                Text("Listening for \"\(wakeWordListener.wakePhrase)\"…")
-                    .font(.footnote)
-                if !wakeWordListener.lastPartialTranscript.isEmpty {
-                    Text(wakeWordListener.lastPartialTranscript)
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-            }
-
-            if let error = wakeWordListener.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-                    .padding(.horizontal)
-            }
-        }
-    }
-
-    private var wearablesSection: some View {
-        Group {
-            Text("Registration: \(wearables.registrationState?.description ?? "nil")")
-            Text("Devices: \(wearables.devices.count)")
-            ForEach(wearables.devices, id: \.self) { id in
-                Text("  \(id.prefix(8)): \(wearables.linkStates[id].map(String.init(describing:)) ?? "unknown"), \(wearables.compatibilities[id]?.displayString ?? "unknown")")
-                    .font(.footnote)
-            }
-            Text("Camera permission: \(String(describing: wearables.cameraPermission))")
-            Text("Session: \(String(describing: wearables.sessionState))")
-
-            Button("Register with Meta AI app") {
-                wearables.startRegistration()
-            }
-            Button("Request camera permission") {
-                Task { await wearables.requestCameraPermission() }
-            }
-            Button("Connect") {
-                Task { await wearables.connect() }
-            }
-            Button("Disconnect") {
-                wearables.disconnect()
-            }
-            Button("Update Firmware") {
-                wearables.updateFirmware()
-            }
-        }
-    }
-
-    private var recordingSection: some View {
-        Group {
-            Button(audioRecorder.isRecording ? "Stop Recording" : "Start Recording") {
-                Task {
-                    if audioRecorder.isRecording {
-                        await audioRecorder.stopRecording()
-                    } else {
-                        await audioRecorder.startRecording()
-                    }
-                }
-            }
-            .disabled(audioRecorder.isTranscribing)
-
-            if audioRecorder.isTranscribing {
-                Text("Transcribing…")
-            }
-
-            if !audioRecorder.transcript.isEmpty {
-                Text(audioRecorder.transcript)
-                    .padding(.horizontal)
-            }
-
-            Button("Ask Assistant") {
-                Task { await audioRecorder.askAssistant() }
-            }
-            .disabled(audioRecorder.transcript.isEmpty || audioRecorder.isAsking)
-
-            if audioRecorder.isAsking {
-                Text("Asking…")
-            }
-
-            if !audioRecorder.assistantReply.isEmpty {
-                Text(audioRecorder.assistantReply)
-                    .padding(.horizontal)
-                    .foregroundColor(.blue)
-            }
-
-            if let error = audioRecorder.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-                    .padding(.horizontal)
-            }
-        }
-    }
-
-    private var saveSection: some View {
-        Group {
-            Text("Vault: \(vaultManager.vaultURL?.lastPathComponent ?? "not selected")")
-
-            Button("Choose Vault Folder") {
-                showingVaultPicker = true
-            }
-
-            Button("Save Note") {
-                var content = "**You:** \(audioRecorder.transcript)"
-                if !audioRecorder.assistantReply.isEmpty {
-                    content += "\n\n**Assistant:** \(audioRecorder.assistantReply)"
-                }
-                vaultManager.saveNote(content)
-            }
-            .disabled(audioRecorder.transcript.isEmpty || vaultManager.vaultURL == nil)
-
-            if let filename = vaultManager.lastSavedFilename {
-                Text("Saved: \(filename)")
-                    .foregroundColor(.green)
-                    .font(.footnote)
-            }
-
-            if let error = vaultManager.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-                    .padding(.horizontal)
-            }
-        }
-    }
-
-    private var realtimeSection: some View {
-        Group {
-            Text("Realtime Voice").font(.headline)
-
-            Button(realtimeClient.isActive ? "End Conversation" : "Start Voice Conversation") {
+            Button {
                 Task {
                     if realtimeClient.isActive {
                         realtimeClient.stop()
                     } else {
+                        // Both use the mic — make sure wake-word listening isn't
+                        // also holding it before starting a manual conversation.
+                        if wakeWordListener.isListening {
+                            wakeWordListener.stop()
+                        }
                         await realtimeClient.start()
                     }
                 }
+            } label: {
+                Label(
+                    realtimeClient.isActive ? "End Conversation" : "Talk Now",
+                    systemImage: realtimeClient.isActive ? "stop.circle.fill" : "mic.fill"
+                )
+                .frame(maxWidth: .infinity)
             }
-
-            if realtimeClient.isActive {
-                Text(realtimeClient.isResponding ? "Assistant responding…" : "Listening…")
-                    .font(.footnote)
-            }
-
-            if !realtimeClient.currentUserTurn.isEmpty {
-                Text("You: \(realtimeClient.currentUserTurn)")
-                    .padding(.horizontal)
-            }
-
-            if !realtimeClient.currentAssistantTurn.isEmpty {
-                Text("Assistant: \(realtimeClient.currentAssistantTurn)")
-                    .padding(.horizontal)
-                    .foregroundColor(.blue)
-            }
-
-            if !realtimeClient.conversationTranscript.isEmpty {
-                Text(realtimeClient.conversationTranscript)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal)
-            }
-
-            if let error = realtimeClient.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-                    .padding(.horizontal)
-            }
+            .buttonStyle(.bordered)
         }
+    }
+
+    // MARK: - Feedback
+
+    private func savedCard(_ filename: String) -> some View {
+        Label("Saved: \(filename)", systemImage: "checkmark.circle.fill")
+            .foregroundColor(.green)
+            .font(.footnote)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func errorCard(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .foregroundColor(.red)
+            .font(.footnote)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
